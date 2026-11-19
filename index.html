@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roblox profile lookup</title>
+<style>
+:root{--bg:#f3f4f7;--panel:#fff;--ink:#14171f;--mute:#6b7280;--line:#e3e5ea;--accent:#2563eb;--bad:#b42318;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1116;--panel:#181b23;--ink:#eceef3;--mute:#9aa1b0;--line:#2a2e39;--accent:#6b9bff;--bad:#ff8a80;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}
+h1{font-size:22px;margin:0 0 14px;letter-spacing:-.01em}
+form{display:flex;gap:8px;margin-bottom:22px}
+input{flex:1;min-width:0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font:inherit}
+button{padding:12px 20px;border:0;border-radius:10px;background:var(--ink);color:var(--bg);font:inherit;font-weight:600;cursor:pointer}
+button:disabled{opacity:.5}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.msg{color:var(--mute);padding:30px 0;text-align:center}.msg.err{color:var(--bad)}
+.layout{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+@media(max-width:800px){.layout{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.profile{text-align:center}
+.profile img.av{width:100%;max-width:240px;aspect-ratio:1;border-radius:12px;background:var(--bg)}
+.profile h2{margin:10px 0 0;font-size:20px;line-height:1.2}
+.profile .un{color:var(--mute)}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;margin-top:8px;background:#dcfce7;color:#166534}
+.tag.banned{background:#fee4e2;color:#b42318}
+.bio{white-space:pre-wrap;text-align:left;margin-top:12px;font-size:14px;word-break:break-word}
+dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px}
+dt{color:var(--mute)}dd{margin:0;text-align:right;word-break:break-word}
+.stack{display:grid;gap:16px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center}
+.stats b{display:block;font-size:22px}.stats span{color:var(--mute);font-size:13px}
+h3{margin:0 0 12px;font-size:16px;display:flex;justify-content:space-between;align-items:baseline}
+h3 small{color:var(--mute);font-weight:400}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.item{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:10px;color:inherit;text-decoration:none;min-width:0}
+.item:hover{border-color:var(--accent)}
+.item img{width:40px;height:40px;border-radius:8px;background:var(--bg);flex:none}
+.item div{min-width:0}.item strong{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item span{display:block;font-size:12px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty{color:var(--mute);font-size:14px;margin:0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Roblox profile lookup</h1>
+  <form id="f">
+    <input id="q" placeholder="Enter a Roblox username" autocomplete="off" autofocus aria-label="Roblox username">
+    <button id="go">Look up</button>
+  </form>
+  <div id="out"><p class="msg">Type a username to see their display name, avatar, groups, games and more.</p></div>
+</main>
+<script>
+const LOCAL=location.protocol.startsWith('http');
+const API=(s,p)=>LOCAL?`/api/${s}${p}`:`https://${s}.roblox.com${p}`;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>Number(n||0).toLocaleString();
+const PROXIES=[u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,u=>u.replace('.roblox.com','.roproxy.com')];
+let pi=-1;
+const one=async(i,u)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),7000);try{const r=await fetch(PROXIES[i](u),{signal:c.signal});if(!r.ok)throw 0;const j=await r.json();pi=i;return j}finally{clearTimeout(t)}};
+const get=async u=>{
+  if(LOCAL){try{const r=await fetch(u);if(!r.ok)throw 0;return await r.json()}catch{return null}}
+  if(pi<0){try{return await Promise.any(PROXIES.map((_,i)=>one(i,u)))}catch{return null}}
+  try{return await one(pi,u)}catch{}
+  try{return await Promise.any(PROXIES.map((_,i)=>one(i,u)))}catch{return null}
+};
+const thumbMap=async(path)=>{const d=await get(API('thumbnails',path));const m={};(d?.data||[]).forEach(t=>m[t.targetId]=t.imageUrl);return m};
+const FALLBACK='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#ccc"/></svg>');
+
+async function lookup(name){
+  const out=$('out');out.innerHTML='<p class="msg">Searching…</p>';
+  $('go').disabled=true;
+  try{
+    const res=await get(API('users',`/v1/users/search?keyword=${encodeURIComponent(name)}&limit=10`));
+    if(!res){out.innerHTML='<p class="msg err">Couldn’t reach Roblox through any of the relay services. Wait a minute and try again.</p>';return}
+    const found=(res.data||[]).find(x=>x.name.toLowerCase()===name.toLowerCase());
+    if(!found){out.innerHTML=`<p class="msg err">No user named “${esc(name)}”. Check the spelling and try again.</p>`;return}
+    const id=found.id;
+    const img=s=>esc(s||FALLBACK);
+    const list=(a,fn,empty)=>a.length?`<div class="grid">${a.map(fn).join('')}</div>`:`<p class="empty">${empty}</p>`;
+    const L='<p class="empty">Loading…</p>', F='<p class="empty">Couldn’t load this section.</p>';
+    out.innerHTML=`
+    <div class="layout">
+      <div class="stack">
+        <div class="panel profile">
+          <img class="av" id="av" alt="Avatar of ${esc(found.name)}">
+          <h2>${esc(found.displayName||found.name)}</h2>
+          <div class="un">@${esc(found.name)}</div>
+          <div id="tag"></div><div id="bio"></div>
+        </div>
+        <div class="panel"><dl id="info">
+          <dt>User ID</dt><dd>${id}</dd>
+          <dt>Profile</dt><dd><a href="https://www.roblox.com/users/${id}/profile" target="_blank" rel="noopener">Open on Roblox</a></dd>
+        </dl></div>
+      </div>
+      <div class="stack">
+        <div class="panel stats" id="stats">
+          <div><b id="s-fr">…</b><span>Friends</span></div><div><b id="s-fo">…</b><span>Followers</span></div>
+          <div><b id="s-fg">…</b><span>Following</span></div><div><b id="s-gr">…</b><span>Groups</span></div>
+        </div>
+        <div class="panel"><h3>Groups <small id="n-g"></small></h3><div id="p-g">${L}</div></div>
+        <div class="panel"><h3>Public games <small id="n-m"></small></h3><div id="p-m">${L}</div></div>
+        <div class="panel"><h3>Recent badges <small id="n-b"></small></h3><div id="p-b">${L}</div></div>
+        <div class="panel"><h3>Friends <small id="n-f"></small></h3><div id="p-f">${L}</div></div>
+      </div>
+    </div>`;
+    $('av').src=FALLBACK;
+    const set=(i,h)=>{const e=$(i);if(e)e.innerHTML=h};
+    const txt=(i,t)=>{const e=$(i);if(e)e.textContent=t};
+    const tasks=[
+      get(API('thumbnails',`/v1/users/avatar?userIds=${id}&size=420x420&format=Png`)).then(d=>{const u=d?.data?.[0]?.imageUrl;if(u)$('av').src=u}),
+      get(API('users',`/v1/users/${id}`)).then(u=>{if(!u)return;
+        set('tag',`<span class="tag ${u.isBanned?'banned':''}">${u.isBanned?'Banned':'Active'}</span>`);
+        if(u.description)set('bio',`<div class="bio">${esc(u.description)}</div>`);
+        const c=u.created?new Date(u.created).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):'Unknown';
+        $('info').insertAdjacentHTML('beforeend',`<dt>Created</dt><dd>${c}</dd><dt>Verified badge</dt><dd>${u.hasVerifiedBadge?'Yes':'No'}</dd>`)}),
+      get(API('users',`/v1/users/${id}/username-history?limit=10&sortOrder=Desc`)).then(h=>{const n=(h?.data||[]).map(x=>x.name);if(n.length)$('info').insertAdjacentHTML('beforeend',`<dt>Past names</dt><dd>${n.map(esc).join(', ')}</dd>`)}),
+      get(API('friends',`/v1/users/${id}/friends/count`)).then(d=>{txt('s-fr',fmt(d?.count));txt('n-f',fmt(d?.count))}),
+      get(API('friends',`/v1/users/${id}/followers/count`)).then(d=>txt('s-fo',fmt(d?.count))),
+      get(API('friends',`/v1/users/${id}/followings/count`)).then(d=>txt('s-fg',fmt(d?.count))),
+      (async()=>{const d=await get(API('groups',`/v2/users/${id}/groups/roles`));
+        if(!d){set('p-g',F);txt('s-gr','–');return}
+        const gl=d.data||[];txt('s-gr',fmt(gl.length));txt('n-g',gl.length);
+        const render=ic=>set('p-g',list(gl,x=>`<a class="item" target="_blank" rel="noopener" href="https://www.roblox.com/groups/${x.group.id}"><img src="${img(ic[x.group.id])}" alt=""><div><strong>${esc(x.group.name)}</strong><span>${esc(x.role.name)} · ${fmt(x.group.memberCount)} members</span></div></a>`,'No public groups.'));
+        render({});
+        if(gl.length)render(await thumbMap(`/v1/groups/icons?groupIds=${gl.slice(0,100).map(x=>x.group.id).join(',')}&size=150x150&format=Png`))})(),
+      (async()=>{const d=await get(API('games',`/v2/users/${id}/games?limit=50&sortOrder=Asc`));
+        if(!d){set('p-m',F);return}
+        const gm=d.data||[];txt('n-m',gm.length);
+        const render=ic=>set('p-m',list(gm,x=>`<a class="item" target="_blank" rel="noopener" href="https://www.roblox.com/games/${x.rootPlace?.id}"><img src="${img(ic[x.id])}" alt=""><div><strong>${esc(x.name)}</strong><span>${fmt(x.placeVisits)} visits</span></div></a>`,'No public games.'));
+        render({});
+        if(gm.length)render(await thumbMap(`/v1/games/icons?universeIds=${gm.map(x=>x.id).join(',')}&size=150x150&format=Png`))})(),
+      (async()=>{const d=await get(API('badges',`/v1/users/${id}/badges?limit=30&sortOrder=Desc`));
+        if(!d){set('p-b',F);return}
+        const bl=d.data||[];txt('n-b',bl.length+(d.nextPageCursor?'+':''));
+        set('p-b',list(bl,x=>`<a class="item" target="_blank" rel="noopener" href="https://www.roblox.com/badges/${x.id}"><div><strong>${esc(x.name)}</strong><span>${fmt(x.statistics?.awardedCount)} awarded</span></div></a>`,'No public badges.'))})(),
+      (async()=>{const d=await get(API('friends',`/v1/users/${id}/friends`));
+        if(!d){set('p-f',F);return}
+        const fl=(d.data||[]).slice(0,24);
+        const render=m=>{set('p-f',list(fl,x=>`<a class="item" href="#${esc(x.name)}" data-u="${esc(x.name)}"><img src="${img(m[x.id])}" alt=""><div><strong>${esc(x.displayName)}</strong><span>@${esc(x.name)}</span></div></a>`,'No public friends.'));
+          out.querySelectorAll('[data-u]').forEach(a=>a.onclick=e=>{e.preventDefault();$('q').value=a.dataset.u;lookup(a.dataset.u);scrollTo(0,0)})};
+        render({});
+        if(fl.length)render(await thumbMap(`/v1/users/avatar-headshot?userIds=${fl.map(x=>x.id).join(',')}&size=150x150&format=Png`))})()
+    ];
+    await Promise.allSettled(tasks);
+  }catch(e){
+    out.innerHTML='<p class="msg err">Something went wrong. Try again.</p>';
+  }finally{$('go').disabled=false}
+}
+$('f').addEventListener('submit',e=>{e.preventDefault();const v=$('q').value.trim();if(v)lookup(v)});
+const init=decodeURIComponent(location.hash.slice(1));if(init){$('q').value=init;lookup(init)}
+</script>
+</body>
+</html>
