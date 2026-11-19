@@ -54,6 +54,7 @@ h3 small{color:var(--mute);font-weight:400}
 </main>
 <script>
 const LOCAL=location.protocol.startsWith('http');
+const px=u=>u&&LOCAL?`/img?u=${encodeURIComponent(u)}`:u;
 const API=(s,p)=>LOCAL?`/api/${s}${p}`:`https://${s}.roblox.com${p}`;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -67,7 +68,7 @@ const get=async u=>{
   try{return await one(pi,u)}catch{}
   try{return await Promise.any(PROXIES.map((_,i)=>one(i,u)))}catch{return null}
 };
-const thumbMap=async(path)=>{const d=await get(API('thumbnails',path));const m={};(d?.data||[]).forEach(t=>m[t.targetId]=t.imageUrl);return m};
+const thumbMap=async(path)=>{const d=await get(API('thumbnails',path));const m={};(d?.data||[]).forEach(t=>m[t.targetId]=px(t.imageUrl));return m};
 const FALLBACK='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#ccc"/></svg>');
 
 async function lookup(name){
@@ -111,7 +112,7 @@ async function lookup(name){
     const set=(i,h)=>{const e=$(i);if(e)e.innerHTML=h};
     const txt=(i,t)=>{const e=$(i);if(e)e.textContent=t};
     const tasks=[
-      get(API('thumbnails',`/v1/users/avatar?userIds=${id}&size=420x420&format=Png`)).then(d=>{const u=d?.data?.[0]?.imageUrl;if(u)$('av').src=u}),
+      get(API('thumbnails',`/v1/users/avatar?userIds=${id}&size=420x420&format=Png`)).then(d=>{const u=d?.data?.[0]?.imageUrl;if(u)$('av').src=px(u)}),
       get(API('users',`/v1/users/${id}`)).then(u=>{if(!u)return;
         set('tag',`<span class="tag ${u.isBanned?'banned':''}">${u.isBanned?'Banned':'Active'}</span>`);
         if(u.description)set('bio',`<div class="bio">${esc(u.description)}</div>`);

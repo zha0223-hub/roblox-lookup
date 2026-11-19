@@ -1,7 +1,7 @@
 """Serves index.html and relays GET requests to Roblox's public API.
 Local:  python server.py  ->  http://localhost:8000
 Render: start command `python server.py` (uses the PORT Render provides)."""
-import os, urllib.request, urllib.error
+import os, urllib.request, urllib.error, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +31,25 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(e.code, e.read() or b"{}", "application/json")
             except Exception as e:
                 return self._send(502, ('{"error":"%s"}' % str(e).replace('"', "'")).encode(), "application/json")
+        if self.path.startswith("/img?"):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            target = (q.get("u") or [""])[0]
+            p = urllib.parse.urlparse(target)
+            if p.scheme != "https" or not (p.hostname or "").endswith(".rbxcdn.com"):
+                return self._send(400, b"bad image url", "text/plain")
+            req = urllib.request.Request(target, headers={"User-Agent": "Mozilla/5.0"})
+            try:
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    body = r.read()
+                    ctype = r.headers.get("Content-Type", "image/png")
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                return self.wfile.write(body)
+            except Exception:
+                return self._send(502, b"image fetch failed", "text/plain")
         with open(os.path.join(HERE, "index.html"), "rb") as f:
             self._send(200, f.read(), "text/html; charset=utf-8")
 
