@@ -41,16 +41,34 @@ h3 small{color:var(--mute);font-weight:400}
 .item div{min-width:0}.item strong{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item span{display:block;font-size:12px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .empty{color:var(--mute);font-size:14px;margin:0}
+
+#tabs{display:flex;gap:6px;margin-bottom:16px}
+#tabs button{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:8px 16px}
+#tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.row button,.sm{padding:8px 14px;font-size:14px;background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+.row button.pri{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.sm{padding:5px 10px;font-size:13px}
+code,pre{font:13px/1.5 ui-monospace,Menlo,Consolas,monospace}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto;margin:8px 0 0}
+.key{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
+.key code{overflow:hidden;text-overflow:ellipsis}
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
 <main>
   <h1>Roblox profile lookup</h1>
+  <nav id="tabs"><button data-t="lookup" class="on">Lookup</button><button data-t="history">History</button><button data-t="api">API</button></nav>
+  <section id="v-lookup">
   <form id="f">
     <input id="q" placeholder="Enter a Roblox username" autocomplete="off" autofocus aria-label="Roblox username">
     <button id="go">Look up</button>
   </form>
   <div id="out"><p class="msg">Type a username to see their display name, avatar, groups, games and more.</p></div>
+</section>
+  <section id="v-history" hidden></section>
+  <section id="v-api" hidden></section>
 </main>
 <script>
 const LOCAL=location.protocol.startsWith('http');
@@ -80,6 +98,7 @@ async function lookup(name){
     const found=(res.data||[]).find(x=>x.name.toLowerCase()===name.toLowerCase());
     if(!found){out.innerHTML=`<p class="msg err">No user named “${esc(name)}”. Check the spelling and try again.</p>`;return}
     const id=found.id;
+    saveHist(found);
     const img=s=>esc(s||FALLBACK);
     const list=(a,fn,empty)=>a.length?`<div class="grid">${a.map(fn).join('')}</div>`:`<p class="empty">${empty}</p>`;
     const L='<p class="empty">Loading…</p>', F='<p class="empty">Couldn’t load this section.</p>';
@@ -153,6 +172,54 @@ async function lookup(name){
 }
 $('f').addEventListener('submit',e=>{e.preventDefault();const v=$('q').value.trim();if(v)lookup(v)});
 const init=decodeURIComponent(location.hash.slice(1));if(init){$('q').value=init;lookup(init)}
+
+const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+function saveHist(u){const h=store.get('rl_hist',[]).filter(x=>x.id!==u.id);h.unshift({id:u.id,name:u.name,displayName:u.displayName,ts:Date.now()});store.set('rl_hist',h.slice(0,500))}
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function showTab(t){
+  ['lookup','history','api'].forEach(x=>{$('v-'+x).hidden=x!==t});
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  if(t==='history')renderHistory();if(t==='api')renderApi();
+}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
+function renderHistory(){
+  const h=store.get('rl_hist',[]);
+  $('v-history').innerHTML=`<div class="panel"><h3>Search history <small>${h.length} saved in this browser</small></h3>
+    <div class="row"><button id="h-json">Export JSON</button><button id="h-csv">Export CSV</button><button id="h-clear">Clear</button></div>
+    ${h.length?`<div class="grid">${h.map(x=>`<a class="item" href="#${esc(x.name)}" data-u="${esc(x.name)}"><div><strong>${esc(x.displayName||x.name)}</strong><span>@${esc(x.name)} · ${new Date(x.ts).toLocaleString()}</span></div></a>`).join('')}</div>`:'<p class="empty">Nothing yet. Accounts you search will show up here.</p>'}</div>`;
+  $('v-history').querySelectorAll('[data-u]').forEach(a=>a.onclick=e=>{e.preventDefault();$('q').value=a.dataset.u;showTab('lookup');lookup(a.dataset.u)});
+  $('h-json').onclick=()=>download('roblox-history.json',JSON.stringify(h,null,2),'application/json');
+  $('h-csv').onclick=()=>download('roblox-history.csv','id,username,displayName,searched_at\n'+h.map(x=>[x.id,x.name,x.displayName,new Date(x.ts).toISOString()].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n'),'text/csv');
+  $('h-clear').onclick=()=>{if(confirm('Clear all history?')){store.set('rl_hist',[]);renderHistory()}};
+}
+function renderApi(){
+  const keys=store.get('rl_keys',[]);const base=LOCAL?location.origin:'https://YOUR-SITE.onrender.com';const k=keys[0]?.key||'YOUR_KEY';
+  $('v-api').innerHTML=`<div class="panel"><h3>API keys <small>${keys.length}</small></h3>
+    <div class="row"><button class="pri" id="k-new">Generate key</button><button id="k-exp">Export keys</button></div>
+    <p id="k-msg" class="empty"></p>
+    ${keys.map((x,i)=>`<div class="key"><code>${esc(x.key)}</code><span><button class="sm" data-c="${i}">Copy</button> <button class="sm" data-d="${i}">Delete</button></span></div>`).join('')}
+    <h3 style="margin-top:18px">Setup (site owner, once)</h3>
+    <ol class="empty" style="padding-left:20px;margin:0">
+      <li>In Render, open your service, then <b>Environment</b>.</li>
+      <li>Add a variable named <code>SECRET_KEY</code> with a long random value, then save.</li>
+      <li>Don't change it later, or every key you made stops working.</li>
+      <li>Keep it private. Never put it in GitHub.</li>
+      <li>Come back here and click <b>Generate key</b>.</li>
+    </ol>
+    <h3 style="margin-top:18px">Use it</h3>
+    <p class="empty">Returns profile, groups, games, badges and friends as JSON.</p>
+    <pre>curl "${esc(base)}/v1/user/duckduck3000" \\
+  -H "X-API-Key: ${esc(k)}"</pre>
+    <pre>fetch("${esc(base)}/v1/user/duckduck3000?key=${esc(k)}")
+  .then(r =&gt; r.json()).then(console.log)</pre></div>`;
+  $('k-new').onclick=async()=>{
+    try{const r=await fetch('/keys/new',{method:'POST'});if(!r.ok)throw 0;const d=await r.json();
+      store.set('rl_keys',[{key:d.key,created:Date.now()},...keys]);renderApi()}
+    catch{$('k-msg').textContent='Could not reach the server. Open the site through server.py or your Render link.'}};
+  $('k-exp').onclick=()=>keys.length?download('roblox-api-keys.json',JSON.stringify(keys,null,2),'application/json'):($('k-msg').textContent='Generate a key first.');
+  $('v-api').querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{navigator.clipboard?.writeText(keys[b.dataset.c].key);b.textContent='Copied'});
+  $('v-api').querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{store.set('rl_keys',keys.filter((_,i)=>i!=b.dataset.d));renderApi()});
+}
 </script>
 </body>
 </html>
